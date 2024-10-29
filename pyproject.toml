@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "pymcu"
+version = "0.1.0"
+description = ""
+authors = ["d-curtis <dave@dcurtis.co.uk>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+python-rtmidi = "^1.5.8"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
