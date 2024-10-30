@@ -3,7 +3,7 @@ import asyncio
 
 from rtmidi.midiutil import open_midiinput, open_midioutput
 
-from messages import *
+from pymcu.messages.sysex import *
 
 PING_INTERVAL = 1
 
@@ -27,9 +27,9 @@ async def responder(midi_out: rtmidi.MidiOut):
                     challenge_code=message.challenge_code
                 )
                 print(f"Tx: {reply}")
-                midi_out.send_message(reply.to_syx())
+                midi_out.send_message(reply.encode())
 
-                midi_out.send_message(UpdateLCD(text="Hello, World!").to_syx())
+                midi_out.send_message(UpdateLCD(text="Hello, World!").encode())
 
                 for i, c in enumerate("Hi Connor"):
                     midi_out.send_message(
@@ -37,7 +37,7 @@ async def responder(midi_out: rtmidi.MidiOut):
                             char=c, 
                             display_offset=i, 
                             left_to_right=True
-                        ).to_syx()
+                        ).encode()
                     )
 
         response_queue.task_done()
@@ -51,7 +51,7 @@ async def handle_midi_input(midi_in: rtmidi.MidiIn, midi_out: rtmidi.MidiOut):
             message, _ = message
             if message[0] == 0xF0:
                 if message[5] in MESSAGE_CLASSES:
-                    handle_message(MESSAGE_CLASSES[message[5]].from_syx(message))
+                    handle_message(MESSAGE_CLASSES[message[5]].from_midi(message))
                 else:
                     print(f"Rx (Unknown Syx): {hex_string(message)}")
             elif message[0] in range(0xE0, 0xEF):
@@ -66,7 +66,7 @@ async def send_ping(midi_out: rtmidi.MidiOut):
     """Send a PING message."""
     while True:
         print(f"Tx: {DeviceQuery()}")
-        midi_out.send_message(DeviceQuery().to_syx())
+        midi_out.send_message(DeviceQuery().encode())
         await asyncio.sleep(PING_INTERVAL)  # Wait a moment before exiting
 
 
