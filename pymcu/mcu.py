@@ -6,6 +6,7 @@ from rtmidi.midiutil import open_midiinput, open_midioutput
 from messages.sysex import *
 from messages.fader import *
 from messages.meter import *
+from messages.button import *
 
 PING_INTERVAL = 5 # seconds
 RX_INTERVAL = 0.001
@@ -21,6 +22,10 @@ class MCUDevice:
         self.vpot_values = {
             0: 0, 1: 0, 2: 0, 3: 0, 
             4: 0, 5: 0, 6: 0, 7: 0, 
+        }
+        self.fader_values = {
+            0: 0, 1: 0, 2: 0, 3: 0,
+            4: 0, 5: 0, 6: 0, 7: 0,
             8: 0
         }
 
@@ -44,7 +49,16 @@ class MCUDevice:
         while True:
             message = await self.tx_queue.get()
             print(message)
-            self.midi_out.send_message(message.encode())
+
+            pkt = message.encode()
+            self.midi_out.send_message(pkt)
+
+            # Not sure I like this behaviour being here...
+            # But if we are sending a NoteOn <technically> it should be followed by an immediate NoteOff.
+            if pkt[0] == 0x90:
+                pkt[0] = 0x80
+                self.midi_out.send_message(pkt)
+
             self.tx_queue.task_done()
 
 
@@ -119,12 +133,18 @@ class MCUDevice:
         Args:
             message (list[int]): incoming raw MIDI
         """
-        message_obj = FaderMoveEvent.from_midi(message)
+        event = FaderMoveEvent.from_midi(message)
+        self.fader_values[event.index] = event.position
+
+        #TODO remove - just for debug
         self.tx_queue.put_nowait(
-            UpdateMeter(
-                message_obj.index,
-                value=0-((message_obj.position / 16380) * -60) -60
+            UpdateLCD(
+                text=f"{event.position:5d}",
+                display_offset=event.index*7
             )
+        )
+        self.tx_queue.put_nowait(
+            SetLED(index=int(event.position/100), state=LED_BLINK if event.index % 2 else LED_OFF)
         )
 
 
