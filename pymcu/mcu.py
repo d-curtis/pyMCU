@@ -97,7 +97,8 @@ class MCUDevice:
                     case _ if message[0] & 0xF0 == 0xE0: 
                         self.receive_fader(message)
                         continue
-                    case _:
+                    case _ if message[0] & 0xF0 == 0x90:
+                        self.receive_button(message)
                         continue
                 # ... more receives
 
@@ -143,9 +144,6 @@ class MCUDevice:
                 display_offset=event.index*7
             )
         )
-        self.tx_queue.put_nowait(
-            SetLED(index=int(event.position/100), state=LED_BLINK if event.index % 2 else LED_OFF)
-        )
 
 
     def receive_button(self, message: list[int]) -> None:
@@ -155,7 +153,19 @@ class MCUDevice:
         Args:
             message (list[int]): incoming raw MIDI
         """
-        raise NotImplementedError
+        event = ButtonPressEvent.from_midi(message)
+    
+        index_str = f"{event.index:02x}"
+
+        for i, c in enumerate(index_str):
+            self.tx_queue.put_nowait(
+                UpdateTimecodeChar(
+                    char=c,
+                    left_to_right=True,
+                    display_offset=i
+                )
+            )
+        print(event)
 
     
     def receive_vpot(self, message: list[int]) -> None:
