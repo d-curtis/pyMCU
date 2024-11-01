@@ -7,6 +7,7 @@ from messages.sysex import *
 from messages.fader import *
 from messages.meter import *
 from messages.button import *
+from messages.vpot import *
 
 PING_INTERVAL = 5 # seconds
 RX_INTERVAL = 0.001
@@ -89,7 +90,6 @@ class MCUDevice:
             await asyncio.sleep(RX_INTERVAL)
             message = self.midi_in.get_message()
             if message:
-                # match?
                 match message := message[0]:
                     case 0xF0:
                         self.receive_sysex(message)
@@ -100,7 +100,9 @@ class MCUDevice:
                     case _ if message[0] & 0xF0 == 0x90:
                         self.receive_button(message)
                         continue
-                # ... more receives
+                    case _ if message[0] & 0xF0 == 0xB0:
+                        self.receive_vpot(message)
+                        continue
 
 
     # ===== #
@@ -175,7 +177,8 @@ class MCUDevice:
         Args:
             message (list[int]): incoming raw MIDI
         """
-        raise NotImplementedError
+        event = VPotMoveEvent.from_midi(message)
+        print(event)
 
 
     # ===== #

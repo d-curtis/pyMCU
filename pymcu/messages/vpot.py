@@ -2,6 +2,14 @@ from dataclasses import dataclass, field
 
 @dataclass
 class VPotMoveEvent():
+    """
+    VPots use CC messages
+    Pot index is encoded in the low byte of the CC number, 0x10 = index 0, 0x17 = index 7, etc.
+    Value is a delta from the current position, can be higher than 1 for acceleration 
+    """
+
+    #TODO Nope this is wrong, currently not handling the sign for the delta value
+
     index: int = field()
     delta: int = field()
 
