@@ -187,9 +187,10 @@ class ConfigTouchlessFaders(MCUBase):
     0x01: fader movements always transmitted even if capacitive touch is not detected (default)
     """
     command: int = 0x0C
+    state: bool = field()
 
     def encode(self) -> list[int]:
-        raise NotImplementedError
+        return SOX + MCU_HEADER + [self.command, int(self.state)] + EOX
 
     @classmethod
     def from_midi(cls, syx: list[int]):
@@ -208,7 +209,7 @@ class ConfigFaderTouchSensitivity(MCUBase):
     command: int = 0x0E
 
     def encode(self) -> list[int]:
-        raise NotImplementedError
+       return SOX + MCU_HEADER + [self.command, self.index, self.sensitivity] + EOX
 
     @classmethod
     def from_midi(cls, syx: list[int]):

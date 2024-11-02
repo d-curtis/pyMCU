@@ -3,18 +3,19 @@ import asyncio
 from rtmidi.midiutil import open_midiinput, open_midioutput
 from typing import Callable, Awaitable, Union
 
-from messages.sysex import *
-from messages.fader import *
-from messages.meter import *
-from messages.button import *
-from messages.vpot import *
-from helpers.managed_fader import ManagedFader
+from .messages.sysex import *
+from .messages.fader import *
+from .messages.meter import *
+from .messages.button import *
+from .messages.vpot import *
+from .helpers.managed_fader import ManagedFader
 
 
 PING_INTERVAL = 5 # seconds
 RX_INTERVAL = 0.001
 
 N_FADERS = 9
+
 
 Callback_T = Union[Callable, Awaitable]
 
@@ -33,6 +34,8 @@ class MCUDevice:
         self.connected_status = False
         self.pending_pings = 0
 
+        self.touchless_faders = False
+
         self.faders = [
             ManagedFader(index=i, update_trigger=self.fader_update_events[i])
             for i in range(N_FADERS)
@@ -40,10 +43,11 @@ class MCUDevice:
 
         self.on_vpot_event: Callback_T = None
         self.on_raw_fader_event: Callback_T = None
+        self.on_managed_fader_event: Callback_T = None
         self.on_button_event: Callback_T = None
 
 
-    async def connect_request_producer(self) -> None:
+    async def _connect_request_producer(self) -> None:
         """
         If we are not currently ping-pong'ing, send a DeviceQuery
         This should result in the device sending a HostConnectionQuery
@@ -54,7 +58,7 @@ class MCUDevice:
             await asyncio.sleep(PING_INTERVAL)
     
 
-    async def fader_update_producer(self) -> None:
+    async def _fader_update_producer(self) -> None:
         """
         Monitor each of the `ManagedFader` objects
         when one has its `update_trigger` set, queue up a `FaderMoveEvent` to update the surface
@@ -76,9 +80,13 @@ class MCUDevice:
                         FaderMoveEvent(fader.index, fader.latched_value)
                     )
                     fader.update_trigger.clear()
+                    if self.on_managed_fader_event:
+                        await call_or_await(
+                            self.on_managed_fader_event(fader)
+                        )
     
 
-    async def tx_consumer(self) -> None:
+    async def _tx_consumer(self) -> None:
         """
         Watch the `tx_queue` and transmit any pending messages
         """
@@ -97,7 +105,7 @@ class MCUDevice:
             self.tx_queue.task_done()
 
 
-    async def response_consumer(self) -> None:
+    async def _response_consumer(self) -> None:
         """
         Watch the `response_queue` and handle any requests from the device
         """
@@ -116,7 +124,7 @@ class MCUDevice:
             await asyncio.sleep(RX_INTERVAL)
     
 
-    async def rx_handler(self):
+    async def _rx_handler(self):
         """
         Read from the MIDI buffer, classify & pass off to the correct handler
         """
@@ -126,7 +134,7 @@ class MCUDevice:
             if message:
                 match message := message[0]:
                     case 0xF0:
-                        self.receive_sysex(message)
+                        self._receive_sysex(message)
                         continue
 
                     case _ if message[0] & 0xF0 == 0xE0 and self.on_fader_event: 
@@ -157,7 +165,7 @@ class MCUDevice:
 
     # ===== #
 
-    def receive_sysex(self, message: list[int]) -> None:
+    def _receive_sysex(self, message: list[int]) -> None:
         """
         Rx handler for sysex messages (protocol connection events)
 
@@ -175,15 +183,152 @@ class MCUDevice:
         if message_obj.response_required:
             self.response_queue.put(message_obj)
 
+
+    # ===== #
+
+
+    def config_touchless(self, state: bool) -> None:
+        """
+        Enable or disable touchless fader mode
+
+        Args:
+            state (bool): on or off
+        """
+        if state == self.touchless:
+            return
+
+        self.touchless = state
+        self.tx_queue.put_nowait(ConfigTouchlessFaders(state=state))
+        for fader in self.faders:
+            fader.touchless_mode = state
+
+
+    def config_touch_sensitivity(self, index: int, sensitivity: int) -> None:
+        """
+        Configure the touch sensitivity of a fader
+
+        Args:
+            index (int): Fader index
+            sensitivity (int): Sensitivity value
+
+        Raises:
+            ValueError: invalid index
+            ValueError: invalid sensitivity
+        """
+        if index < 0 or index > N_FADERS:
+            raise ValueError(f"Fader index {index} out of range (0..{N_FADERS})")
+        if sensitivity < 0x00 or index > 0x05:
+            raise ValueError(f"Sensitivity {sensitivity:02x} out of range (0x00..0x05)")
+        
+        self.tx_queue.put_nowait(
+            ConfigFaderTouchSensitivity(index=index, sensitivity=sensitivity)
+        )
+
     
+    def config_channel_meter_mode(self, channel: int, mode: int) -> None:
+        """
+        Configure the meter mode for a channel
+
+        Args:
+            channel (int): Channel index
+            mode (int): Config bit map
+        """
+        self.tx_queue.put_nowait(
+            ConfigChannelMeterMode(channel=channel, mode=mode)
+        )
+
+
+    def config_lcd_meter_mode(self, mode: int) -> None:
+        """
+        Configure the LCD meter mode
+
+        Args:
+            mode (int): 0x00: horizontal, 0x01: vertical
+        """
+        self.tx_queue.put_nowait(
+            ConfigLCDMeterMode(mode=mode)
+        )
+
+    
+    def reset(self) -> None:
+        """
+        Reset the device
+        """
+        self.tx_queue.put_nowait(Reset())
+
+    
+    def update_timecode_raw(self, char: int, display_offset: int) -> None:
+        """
+        Update the timecode display with raw text
+
+        Args:
+            char (int): Raw character code
+            display_offset (int): Offset to write to
+        """
+        self.tx_queue.put_nowait(
+            UpdateTimecodeChar(char=char, display_offset=display_offset)
+        )
+
+    
+    def update_timecode(self, text: str, display_offset: int = 0, left_to_right: bool = True) -> None:
+        for i, char in enumerate(text):
+            self.tx_queue.put_nowait(
+                UpdateTimecodeChar(
+                    char=char,
+                    display_offset=display_offset+i,
+                    left_to_right=left_to_right
+                )
+            )
+
+
+    def update_lcd_raw(self, text: str, display_offset: int = 0) -> None:
+        """
+        Update the LCD with raw text
+
+        Args:
+            text (str): Text to send
+            display_offset (int, optional): Offset to write to. Defaults to 0.
+        """
+        self.tx_queue.put_nowait(
+            UpdateLCD(text=text, display_offset=display_offset)
+        )
+
+
+    def update_single_lcd(self, text: str, index: int, line: int, wrap: bool = True) -> None:
+        """
+        Update a single segment of the LCD
+
+        Args:
+            text (str): Text to send
+            index (int): Display index
+            line (int): Which line to write to
+            wrap (bool, optional): If line is 0 and text overflows, wrap to line 1 on the same LCD. Defaults to True.
+        """
+        sanitised_text = ""
+        offset = (index * LCD_CHAR_WIDTH) + (line * 0x38)
+
+        if len(text) > LCD_CHAR_WIDTH:
+            if wrap:
+                sanitised_text = text[:LCD_CHAR_WIDTH] + "\n" + text[LCD_CHAR_WIDTH:]
+            else:
+                sanitised_text = text[:LCD_CHAR_WIDTH]
+
+        lines = sanitised_text.split("\n")
+        if line == 0:
+            self.update_lcd_raw(lines[0], display_offset=offset)
+            self.update_lcd_raw(lines[1], display_offset=offset + 0x38)
+        else:
+            self.update_lcd_raw(lines[0], display_offset=(line * 0x38) + index)
+
+
     # ===== #
 
     async def run(self):
-        asyncio.create_task(self.tx_consumer())
-        asyncio.create_task(self.rx_handler())
-        asyncio.create_task(self.response_consumer())
-        asyncio.create_task(self.fader_update_producer())
-        asyncio.create_task(self.connect_request_producer())
+        asyncio.create_task(self._tx_consumer())
+        asyncio.create_task(self._rx_handler())
+        asyncio.create_task(self._response_consumer())
+        asyncio.create_task(self._fader_update_producer())
+        asyncio.create_task(self._connect_request_producer())
 
         while True:
             await asyncio.sleep(1)
