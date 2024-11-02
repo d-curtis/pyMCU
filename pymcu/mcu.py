@@ -1,7 +1,7 @@
-import rtmidi
 import asyncio
 
 from rtmidi.midiutil import open_midiinput, open_midioutput
+from typing import Callable, Awaitable, Union
 
 from messages.sysex import *
 from messages.fader import *
@@ -9,8 +9,17 @@ from messages.meter import *
 from messages.button import *
 from messages.vpot import *
 
+
 PING_INTERVAL = 5 # seconds
 RX_INTERVAL = 0.001
+
+Callback_T = Union[Callable, Awaitable]
+
+async def call_or_await(func: Callback_T, *args, **kwargs) -> None:
+    if asyncio.iscoroutinefunction(func):
+        await func(*args, **kwargs)
+    else:
+        func(*args, **kwargs)
 
 class MCUDevice:
     def __init__(self, input_port: str, output_port: str):
@@ -20,15 +29,10 @@ class MCUDevice:
         self.midi_out, _ = open_midioutput(output_port)
         self.connected_status = False
         self.pending_pings = 0
-        self.vpot_values = {
-            0: 0, 1: 0, 2: 0, 3: 0, 
-            4: 0, 5: 0, 6: 0, 7: 0, 
-        }
-        self.fader_values = {
-            0: 0, 1: 0, 2: 0, 3: 0,
-            4: 0, 5: 0, 6: 0, 7: 0,
-            8: 0
-        }
+
+        self.on_vpot_event: Callback_T = None
+        self.on_fader_event: Callback_T = None
+        self.on_button_event: Callback_T = None
 
 
     async def connect_request_producer(self) -> None:
@@ -94,14 +98,30 @@ class MCUDevice:
                     case 0xF0:
                         self.receive_sysex(message)
                         continue
-                    case _ if message[0] & 0xF0 == 0xE0: 
-                        self.receive_fader(message)
+
+                    case _ if message[0] & 0xF0 == 0xE0 and self.on_fader_event: 
+                        await call_or_await(
+                            self.on_fader_event(FaderMoveEvent.from_midi(message))
+                        )
                         continue
-                    case _ if message[0] & 0xF0 == 0x90:
-                        self.receive_button(message)
+
+                    case _ if message[0] & 0xF0 == 0x90 and self.on_button_event:
+                        await call_or_await(
+                            self.on_button_event(ButtonPressEvent.from_midi(message))
+                        )
                         continue
+
                     case _ if message[0] & 0xF0 == 0xB0:
-                        self.receive_vpot(message)
+                        if message[1] == 0x60 and self.on_scrollwheel_event:
+                            await call_or_await(
+                                self.on_scrollwheel_event(
+                                    ScrollWheelMoveEvent.from_midi(message)
+                                )
+                            )
+                        elif self.on_vpot_event:
+                            await call_or_await(
+                                self.on_vpot_event(VPotMoveEvent.from_midi(message))
+                            )
                         continue
 
 
@@ -129,58 +149,6 @@ class MCUDevice:
         ...
 
     
-    def receive_fader(self, message: list[int]) -> None:
-        """
-        Rx handler for fader change messages
-
-        Args:
-            message (list[int]): incoming raw MIDI
-        """
-        event = FaderMoveEvent.from_midi(message)
-        self.fader_values[event.index] = event.position
-
-        #TODO remove - just for debug
-        self.tx_queue.put_nowait(
-            UpdateLCD(
-                text=f"{event.position:5d}",
-                display_offset=event.index*7
-            )
-        )
-
-
-    def receive_button(self, message: list[int]) -> None:
-        """
-        Rx handler for button press/release messages
-
-        Args:
-            message (list[int]): incoming raw MIDI
-        """
-        event = ButtonPressEvent.from_midi(message)
-    
-        index_str = f"{event.index:02x}"
-
-        for i, c in enumerate(index_str):
-            self.tx_queue.put_nowait(
-                UpdateTimecodeChar(
-                    char=c,
-                    left_to_right=True,
-                    display_offset=i
-                )
-            )
-        print(event)
-
-    
-    def receive_vpot(self, message: list[int]) -> None:
-        """
-        Rx handler for VPot change messages
-
-        Args:
-            message (list[int]): incoming raw MIDI
-        """
-        event = VPotMoveEvent.from_midi(message)
-        print(event)
-
-
     # ===== #
 
     async def run(self):

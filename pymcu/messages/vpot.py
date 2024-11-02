@@ -29,7 +29,7 @@ class VPotMoveEvent():
         ]
 
 
-class TransportMoveEvent(VPotMoveEvent):
+class ScrollWheelMoveEvent(VPotMoveEvent):
     """
     Same thing as VPot, but these come in on 0x60.
     Maybe we want a distinct event
