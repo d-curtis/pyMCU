@@ -50,10 +50,8 @@ class MCUDevice:
         """
         Watch the `tx_queue` and transmit any pending messages
         """
-        print("Tx consumer started")
         while True:
             message = await self.tx_queue.get()
-            print(message)
 
             pkt = message.encode()
             self.midi_out.send_message(pkt)
@@ -138,15 +136,12 @@ class MCUDevice:
         command_byte = message[5]
 
         if command_byte not in MESSAGE_CLASSES:
-            print(f"(receive_sysex): Unknown: {message}")
             return
         
         message_obj = MESSAGE_CLASSES[command_byte].from_midi(message)
 
         if message_obj.response_required:
             self.response_queue.put(message_obj)
-
-        ...
 
     
     # ===== #
@@ -166,4 +161,7 @@ class MCUDevice:
 
 if __name__ == "__main__":
     controller = MCUDevice("X-Touch INT", "X-Touch INT")
+    controller.on_button_event = print
+    controller.on_fader_event = print
+    controller.on_vpot_event = print
     asyncio.run(controller.run())
