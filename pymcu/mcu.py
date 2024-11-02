@@ -297,12 +297,13 @@ class MCUDevice:
             text (str): Text to send
             display_offset (int, optional): Offset to write to. Defaults to 0.
         """
+        print(f"Updating LCD: {text} offset: {display_offset:02x}")
         self.tx_queue.put_nowait(
             UpdateLCD(text=text, display_offset=display_offset)
         )
 
 
-    def update_single_lcd(self, text: str, index: int, line: int, wrap: bool = True) -> None:
+    def update_single_lcd(self, text: str, index: int, line: int = 0, wrap: bool = True) -> None:
         """
         Update a single segment of the LCD
 
@@ -317,16 +318,22 @@ class MCUDevice:
 
         if len(text) > LCD_CHAR_WIDTH:
             if wrap:
-                sanitised_text = text[:LCD_CHAR_WIDTH] + "\n" + text[LCD_CHAR_WIDTH:]
+                if "\n" in text:
+                    sanitised_text = text
+                else:
+                    sanitised_text = text[:LCD_CHAR_WIDTH] + "\n" + text[LCD_CHAR_WIDTH:]
             else:
                 sanitised_text = text[:LCD_CHAR_WIDTH]
 
         lines = sanitised_text.split("\n")
+        print(sanitised_text)
+        print(lines)
         if line == 0:
             self.update_lcd_raw(lines[0], display_offset=offset)
             self.update_lcd_raw(lines[1], display_offset=offset + 0x38)
         else:
             self.update_lcd_raw(lines[0], display_offset=(line * 0x38) + index)
+
 
     def update_lcd_colour(self, index: int, colour: int) -> None:
         """
@@ -343,6 +350,7 @@ class MCUDevice:
             UpdateLCDColour(colours=self.lcd_colours)
         )
 
+
     def update_lcd_colours(self, colours: list[int]) -> None:
         """
         Update the colour of all LCDs
@@ -355,7 +363,9 @@ class MCUDevice:
             UpdateLCDColour(colours=self.lcd_colours)
         )
 
+
     # ===== #
+
 
     async def run(self):
         asyncio.create_task(self._tx_consumer())
@@ -405,6 +415,15 @@ if __name__ == "__main__":
     controller.on_managed_fader_event = print
     controller.on_vpot_event = demo_vpot
     controller.on_scrollwheel_event = demo_wheel
+
+    controller.update_single_lcd("X2P Gtr\nDnte 01", index=0)
+    controller.update_single_lcd("X2P 2\nDnte 02", index=1)
+    controller.update_single_lcd("MP8R 7\nDnte 31", index=2)
+    controller.update_single_lcd("MP8R 8\nDnte 31", index=3)
+    controller.update_single_lcd("Peak L\nAnlg 15", index=4)
+    controller.update_single_lcd("Peak R\nAnlg 16", index=5)
+    controller.update_single_lcd("Sample\nLoopB 1", index=6)
+    controller.update_single_lcd("Kemp DI\nSPDIF 1", index=7)
 
 
 
