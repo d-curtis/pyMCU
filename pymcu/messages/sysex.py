@@ -39,6 +39,9 @@ class DeviceQuery(MCUBase):
     """
     command = 0x00
 
+    def encode(self) -> list[int]:
+        return SOX + MCU_HEADER + [self.command] + EOX
+
     def to_midi(self):
         return SOX + MCU_HEADER + [self.command] + EOX
 
@@ -187,7 +190,7 @@ class ConfigTouchlessFaders(MCUBase):
     0x01: fader movements always transmitted even if capacitive touch is not detected (default)
     """
     command: int = 0x0C
-    state: bool = field()
+    state: bool = field(default=None)
 
     def encode(self) -> list[int]:
         return SOX + MCU_HEADER + [self.command, int(self.state)] + EOX

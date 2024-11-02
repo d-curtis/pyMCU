@@ -37,7 +37,7 @@ class MCUDevice:
         self.touchless_faders = False
 
         self.faders = [
-            ManagedFader(index=i, update_trigger=self.fader_update_events[i])
+            ManagedFader(index=i)
             for i in range(N_FADERS)
         ]
 
@@ -66,23 +66,23 @@ class MCUDevice:
         """
         while True:
             # Wait for any event to be set
-            await asyncio.gather(
-                *[
-                    fader.update_trigger.wait() for fader in self.faders
+            await asyncio.wait(
+                [
+                    asyncio.create_task(fader.update_trigger.wait()) for fader in self.faders
                 ],
-                asyncio.FIRST_COMPLETED
+                return_when=asyncio.FIRST_COMPLETED
             )
             
             # Send the response for the correct one(s)
             for fader in self.faders:
                 if fader.update_trigger.is_set():
                     await self.tx_queue.put(
-                        FaderMoveEvent(fader.index, fader.latched_value)
+                        FaderMoveEvent(index=fader.index, position=fader.latched_value)
                     )
                     fader.update_trigger.clear()
                     if self.on_managed_fader_event:
                         await call_or_await(
-                            self.on_managed_fader_event(fader)
+                            self.on_managed_fader_event, fader
                         )
     
 
@@ -92,6 +92,7 @@ class MCUDevice:
         """
         while True:
             message = await self.tx_queue.get()
+            print(f"Tx: {message}")
 
             pkt = message.encode()
             self.midi_out.send_message(pkt)
@@ -137,28 +138,32 @@ class MCUDevice:
                         self._receive_sysex(message)
                         continue
 
-                    case _ if message[0] & 0xF0 == 0xE0 and self.on_fader_event: 
+                    case _ if message[0] & 0xF0 == 0xE0 and self.on_raw_fader_event: 
+                        event = FaderMoveEvent.from_midi(message)
+                        self.faders[event.index].update(event)
                         await call_or_await(
-                            self.on_fader_event(FaderMoveEvent.from_midi(message))
+                            self.on_raw_fader_event, event
                         )
                         continue
 
                     case _ if message[0] & 0xF0 == 0x90 and self.on_button_event:
+                        event = ButtonPressEvent.from_midi(message)
+                        if event.index in range(104, 113):
+                            self.faders[event.index - 104].touch(event)
                         await call_or_await(
-                            self.on_button_event(ButtonPressEvent.from_midi(message))
+                            self.on_button_event, ButtonPressEvent.from_midi(message)
                         )
                         continue
 
                     case _ if message[0] & 0xF0 == 0xB0:
                         if message[1] == 0x60 and self.on_scrollwheel_event:
                             await call_or_await(
-                                self.on_scrollwheel_event(
+                                self.on_scrollwheel_event,
                                     ScrollWheelMoveEvent.from_midi(message)
-                                )
                             )
                         elif self.on_vpot_event:
                             await call_or_await(
-                                self.on_vpot_event(VPotMoveEvent.from_midi(message))
+                                self.on_vpot_event, VPotMoveEvent.from_midi(message)
                             )
                         continue
 
@@ -338,9 +343,26 @@ class MCUDevice:
         self.midi_out.close_port()
 
 
+
 if __name__ == "__main__":
     controller = MCUDevice("X-Touch INT", "X-Touch INT")
-    controller.on_button_event = print
+
+    # ...As an example
+
+    def flip_faders(event: ButtonPressEvent) -> None:
+        if event.index in range(32, 40):
+            controller.faders[event.index - 32].set_position(0x3FFF if event.state else 0)
+    
+    def move_faders(event: VPotMoveEvent) -> None:
+        if event.index in range(0, 8):
+            controller.faders[event.index].set_position(
+                controller.faders[event.index].latched_value + (event.delta * 20)
+            )
+
+    controller.on_button_event = flip_faders
     controller.on_raw_fader_event = print
-    controller.on_vpot_event = print
+    controller.on_managed_fader_event = print
+    controller.on_vpot_event = move_faders
+
+
     asyncio.run(controller.run())
