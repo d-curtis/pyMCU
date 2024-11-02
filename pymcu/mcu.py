@@ -8,10 +8,13 @@ from messages.fader import *
 from messages.meter import *
 from messages.button import *
 from messages.vpot import *
+from helpers.managed_fader import ManagedFader
 
 
 PING_INTERVAL = 5 # seconds
 RX_INTERVAL = 0.001
+
+N_FADERS = 9
 
 Callback_T = Union[Callable, Awaitable]
 
@@ -30,8 +33,13 @@ class MCUDevice:
         self.connected_status = False
         self.pending_pings = 0
 
+        self.faders = [
+            ManagedFader(index=i, update_trigger=self.fader_update_events[i])
+            for i in range(N_FADERS)
+        ]
+
         self.on_vpot_event: Callback_T = None
-        self.on_fader_event: Callback_T = None
+        self.on_raw_fader_event: Callback_T = None
         self.on_button_event: Callback_T = None
 
 
@@ -44,6 +52,30 @@ class MCUDevice:
         while True:
             await self.tx_queue.put(DeviceQuery())
             await asyncio.sleep(PING_INTERVAL)
+    
+
+    async def fader_update_producer(self) -> None:
+        """
+        Monitor each of the `ManagedFader` objects
+        when one has its `update_trigger` set, queue up a `FaderMoveEvent` to update the surface
+        This prevents the surface from pulling the fader position back down after releasing
+        """
+        while True:
+            # Wait for any event to be set
+            await asyncio.gather(
+                *[
+                    fader.update_trigger.wait() for fader in self.faders
+                ],
+                asyncio.FIRST_COMPLETED
+            )
+            
+            # Send the response for the correct one(s)
+            for fader in self.faders:
+                if fader.update_trigger.is_set():
+                    await self.tx_queue.put(
+                        FaderMoveEvent(fader.index, fader.latched_value)
+                    )
+                    fader.update_trigger.clear()
     
 
     async def tx_consumer(self) -> None:
@@ -150,6 +182,8 @@ class MCUDevice:
         asyncio.create_task(self.tx_consumer())
         asyncio.create_task(self.rx_handler())
         asyncio.create_task(self.response_consumer())
+        asyncio.create_task(self.fader_update_producer())
+        asyncio.create_task(self.connect_request_producer())
 
         while True:
             await asyncio.sleep(1)
@@ -162,6 +196,6 @@ class MCUDevice:
 if __name__ == "__main__":
     controller = MCUDevice("X-Touch INT", "X-Touch INT")
     controller.on_button_event = print
-    controller.on_fader_event = print
+    controller.on_raw_fader_event = print
     controller.on_vpot_event = print
     asyncio.run(controller.run())
