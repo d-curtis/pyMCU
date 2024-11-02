@@ -25,7 +25,20 @@ class VPotMoveEvent():
         return [
             0xB0,
             0x10 | self.index,
-            self.delta
+            self.delta if self.delta > 0 else (0 - self.delta) | 0b0100_0000
+        ]
+
+
+class TransportMoveEvent(VPotMoveEvent):
+    """
+    Same thing as VPot, but these come in on 0x60.
+    Maybe we want a distinct event
+    """
+    def encode(self):
+        return [
+            0xB0,
+            0x60,
+            self.delta if self.delta > 0 else (0 - self.delta) | 0b0100_0000
         ]
 
 
