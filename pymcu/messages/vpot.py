@@ -8,16 +8,17 @@ class VPotMoveEvent():
     Value is a delta from the current position, can be higher than 1 for acceleration 
     """
 
-    #TODO Nope this is wrong, currently not handling the sign for the delta value
-
     index: int = field()
     delta: int = field()
 
     @classmethod
     def from_midi(cls, data):
+        sign = data[2] & 0b0100_0000
+        value = data[2] & 0b0011_1111
+
         return cls(
             index=(data[1] & 0x0F),
-            delta=(data[2] & 0x7F)
+            delta=(value if not sign else 0 - value)
         )
     
     def encode(self):
