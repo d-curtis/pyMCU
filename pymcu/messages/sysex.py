@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 
 SOX = [0xF0]
 MCU_HEADER = [0x00, 0x00, 0x66, 0x14]
+BEH_HEADER = [0x00, 0x00, 0x66, 0x58]
 EOX = [0xF7]
 
 SEGMENT_CHARS = {
@@ -245,6 +246,36 @@ class UpdateLCD(MCUBase):
             + [self.command] \
             + [self.display_offset] \
             + self.raw_text \
+            + EOX
+
+LCD_OFF = 0
+LCD_RED = 1
+LCD_GREEN = 2
+LCD_YELLOW = 3
+LCD_BLUE = 4
+LCD_PINK = 5
+LCD_CYAN = 6
+LCD_WHITE = 7
+
+@dataclass
+class UpdateLCDColour(MCUBase):
+    """
+    Host -> Device
+    """
+    colours: list[int] = field(default_factory=list)
+    command: int = 0x72
+
+    def __post_init__(self):
+        if len(self.colours) != 8:
+            print(self.colours)
+            raise ValueError("Need 8 colours")
+
+    def encode(self) -> list[int]:
+        return \
+            SOX \
+            + MCU_HEADER \
+            + [self.command] \
+            + self.colours \
             + EOX
 
 

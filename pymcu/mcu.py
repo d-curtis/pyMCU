@@ -41,10 +41,13 @@ class MCUDevice:
             for i in range(N_FADERS)
         ]
 
+        self.lcd_colours = [LCD_WHITE] * 8
+
         self.on_vpot_event: Callback_T = None
         self.on_raw_fader_event: Callback_T = None
         self.on_managed_fader_event: Callback_T = None
         self.on_button_event: Callback_T = None
+        self.on_scrollwheel_event: Callback_T = None
 
 
     async def _connect_request_producer(self) -> None:
@@ -156,7 +159,7 @@ class MCUDevice:
                         continue
 
                     case _ if message[0] & 0xF0 == 0xB0:
-                        if message[1] == 0x60 and self.on_scrollwheel_event:
+                        if message[1] & 0x0F == 12 and self.on_scrollwheel_event:
                             await call_or_await(
                                 self.on_scrollwheel_event,
                                     ScrollWheelMoveEvent.from_midi(message)
@@ -325,6 +328,32 @@ class MCUDevice:
         else:
             self.update_lcd_raw(lines[0], display_offset=(line * 0x38) + index)
 
+    def update_lcd_colour(self, index: int, colour: int) -> None:
+        """
+        Update the colour of a single LCD
+
+        Args:
+            index (int): LCD index
+            colour (int): Colour index
+        """
+        if colour < 0 or colour > 0x0F:
+            return
+        self.lcd_colours[index] = colour
+        self.tx_queue.put_nowait(
+            UpdateLCDColour(colours=self.lcd_colours)
+        )
+
+    def update_lcd_colours(self, colours: list[int]) -> None:
+        """
+        Update the colour of all LCDs
+
+        Args:
+            colours (list[int]): Colour index
+        """
+        self.lcd_colours = colours
+        self.tx_queue.put_nowait(
+            UpdateLCDColour(colours=self.lcd_colours)
+        )
 
     # ===== #
 
@@ -349,20 +378,34 @@ if __name__ == "__main__":
 
     # ...As an example
 
-    def flip_faders(event: ButtonPressEvent) -> None:
+    def demo_button(event: ButtonPressEvent) -> None:
         if event.index in range(32, 40):
             controller.faders[event.index - 32].set_position(0x3FFF if event.state else 0)
     
-    def move_faders(event: VPotMoveEvent) -> None:
+    def demo_vpot(event: VPotMoveEvent) -> None:
         if event.index in range(0, 8):
             controller.faders[event.index].set_position(
                 controller.faders[event.index].latched_value + (event.delta * 20)
             )
+            controller.update_lcd_colour(index=event.index, colour=controller.lcd_colours[event.index] + event.delta)
+    
+    def demo_fader(event: ManagedFader) -> None:
+        controller.update_timecode(f"Monitor A", display_offset=2)
+    
+    colour_idx = 0
+    def demo_wheel(event: ScrollWheelMoveEvent) -> None:
+        global colour_idx
+        colour_idx += event.delta
+        print(colour_idx)
+        controller.tx_queue.put_nowait(UpdateLCDColour(colours=[colour_idx]*8))
 
-    controller.on_button_event = flip_faders
-    controller.on_raw_fader_event = print
+
+    controller.on_button_event = demo_button
+    controller.on_raw_fader_event = demo_fader
     controller.on_managed_fader_event = print
-    controller.on_vpot_event = move_faders
+    controller.on_vpot_event = demo_vpot
+    controller.on_scrollwheel_event = demo_wheel
+
 
 
     asyncio.run(controller.run())
