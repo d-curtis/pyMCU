@@ -1,6 +1,7 @@
 import asyncio
 
 from rtmidi.midiutil import open_midiinput, open_midioutput
+from rtmidi import MidiIn, MidiOut
 from typing import Callable, Awaitable, Union
 
 from .messages.sysex import *
@@ -26,11 +27,11 @@ async def call_or_await(func: Callback_T, *args, **kwargs) -> None:
         func(*args, **kwargs)
 
 class MCUDevice:
-    def __init__(self, input_port: str, output_port: str):
+    def __init__(self, input_port: Union[str, MidiIn], output_port: Union[str, MidiOut]):
         self.tx_queue = asyncio.Queue(maxsize=1024)
         self.response_queue = asyncio.Queue(maxsize=1024)
-        self.midi_in, _ = open_midiinput(input_port)
-        self.midi_out, _ = open_midioutput(output_port)
+        self.midi_in, _ = open_midiinput(input_port) if type(input_port) is str else (input_port, None)
+        self.midi_out, _ = open_midioutput(output_port) if type(output_port) is str else (output_port, None)
         self.connected_status = False
         self.pending_pings = 0
 
@@ -384,7 +385,9 @@ class MCUDevice:
 
 
 if __name__ == "__main__":
-    controller = MCUDevice("X-Touch INT", "X-Touch INT")
+    inport, _ = open_midiinput("X-Touch INT")
+    outport, _ = open_midioutput("X-Touch INT")
+    controller = MCUDevice(inport, outport)
 
     # ...As an example
 
