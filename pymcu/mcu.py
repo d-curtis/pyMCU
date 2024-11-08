@@ -143,9 +143,9 @@ class MCUDevice:
                         continue
 
                     case _ if message[0] & 0xF0 == 0xE0:
+                        event = FaderMoveEvent.from_midi(message)
                         self.faders[event.index].update(event)
                         if self.on_raw_fader_event: 
-                            event = FaderMoveEvent.from_midi(message)
                             await call_or_await(
                                 self.on_raw_fader_event, event
                             )
