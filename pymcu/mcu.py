@@ -366,6 +366,19 @@ class MCUDevice:
             UpdateLCDColour(colours=self.lcd_colours)
         )
 
+    
+    def set_led(self, index: int, state: int) -> None:
+        """
+        Set the state of an LED
+
+        Args:
+            index (int): LED index
+            state (int): State
+        """
+        self.tx_queue.put_nowait(
+            SetLED(index=index, state=state)
+        )
+
 
     # ===== #
 
