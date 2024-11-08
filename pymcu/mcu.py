@@ -315,16 +315,18 @@ class MCUDevice:
             text (Union[str, list[str]]): Text to send, either line 0 or list of both lines
             line (int): Which line to write to if text is a string
         """
+        if type(text) is int:
+            text = str(text)
         if type(text) is str:
             offset = (index * LCD_CHAR_WIDTH) + (line * 0x38)
-            self.update_lcd_raw(text[:7], display_offset=offset)
+            self.update_lcd_raw(f"{text[:7]:=LCD_CHAR_WIDTH}", display_offset=offset)
             return
 
         for line, line_text in enumerate(text):
             if line > 1:
                 return
             offset = (index * LCD_CHAR_WIDTH) + (line * 0x38)
-            self.update_lcd_raw(line_text, display_offset=offset)
+            self.update_lcd_raw(f"{line_text[:7]:=LCD_CHAR_WIDTH]}", display_offset=offset)
 
 
     def update_lcd_colour(self, index: int, colour: int) -> None:
