@@ -378,6 +378,18 @@ class MCUDevice:
         self.tx_queue.put_nowait(
             SetLED(index=index, state=state)
         )
+    
+
+    def set_fader(self, index: int, position: int) -> None:
+        """
+        Set the position of a fader
+
+        Args:
+            index (int): Fader index
+            position (int): Position
+        """
+        self.faders[index].set_position(position)
+        self.tx_queue.put_nowait(FaderMoveEvent(index=index, position=position))
 
 
     # ===== #
