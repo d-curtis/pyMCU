@@ -142,12 +142,13 @@ class MCUDevice:
                         self._receive_sysex(message)
                         continue
 
-                    case _ if message[0] & 0xF0 == 0xE0 and self.on_raw_fader_event: 
-                        event = FaderMoveEvent.from_midi(message)
+                    case _ if message[0] & 0xF0 == 0xE0:
                         self.faders[event.index].update(event)
-                        await call_or_await(
-                            self.on_raw_fader_event, event
-                        )
+                        if self.on_raw_fader_event: 
+                            event = FaderMoveEvent.from_midi(message)
+                            await call_or_await(
+                                self.on_raw_fader_event, event
+                            )
                         continue
 
                     case _ if message[0] & 0xF0 == 0x90 and self.on_button_event:
