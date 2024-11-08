@@ -151,13 +151,14 @@ class MCUDevice:
                             )
                         continue
 
-                    case _ if message[0] & 0xF0 == 0x90 and self.on_button_event:
+                    case _ if message[0] & 0xF0 == 0x90:
                         event = ButtonPressEvent.from_midi(message)
                         if event.index in range(104, 113):
                             self.faders[event.index - 104].touch(event)
-                        await call_or_await(
-                            self.on_button_event, ButtonPressEvent.from_midi(message)
-                        )
+                        if self.on_button_event:
+                            await call_or_await(
+                                self.on_button_event, ButtonPressEvent.from_midi(message)
+                            )
                         continue
 
                     case _ if message[0] & 0xF0 == 0xB0:
