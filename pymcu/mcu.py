@@ -306,36 +306,25 @@ class MCUDevice:
         )
 
 
-    def update_single_lcd(self, text: str, index: int, line: int = 0, wrap: bool = True) -> None:
+    def update_single_lcd(self, index: int, text: Union[str, list[str]], line=0) -> None:
         """
         Update a single segment of the LCD
 
         Args:
-            text (str): Text to send
             index (int): Display index
-            line (int): Which line to write to
-            wrap (bool, optional): If line is 0 and text overflows, wrap to line 1 on the same LCD. Defaults to True.
+            text (Union[str, list[str]]): Text to send, either line 0 or list of both lines
+            line (int): Which line to write to if text is a string
         """
-        sanitised_text = ""
-        offset = (index * LCD_CHAR_WIDTH) + (line * 0x38)
+        if type(text) is str:
+            offset = (index * LCD_CHAR_WIDTH) + (line * 0x38)
+            self.update_lcd_raw(text[:7], display_offset=offset)
+            return
 
-        if len(text) > LCD_CHAR_WIDTH:
-            if wrap:
-                if "\n" in text:
-                    sanitised_text = text
-                else:
-                    sanitised_text = text[:LCD_CHAR_WIDTH] + "\n" + text[LCD_CHAR_WIDTH:]
-            else:
-                sanitised_text = text[:LCD_CHAR_WIDTH]
-
-        lines = sanitised_text.split("\n")
-        print(sanitised_text)
-        print(lines)
-        if line == 0:
-            self.update_lcd_raw(lines[0], display_offset=offset)
-            self.update_lcd_raw(lines[1], display_offset=offset + 0x38)
-        else:
-            self.update_lcd_raw(lines[0], display_offset=(line * 0x38) + index)
+        for line, line_text in enumerate(text):
+            if line > 1:
+                return
+            offset = (index * LCD_CHAR_WIDTH) + (line * 0x38)
+            self.update_lcd_raw(line_text, display_offset=offset)
 
 
     def update_lcd_colour(self, index: int, colour: int) -> None:
