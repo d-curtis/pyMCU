@@ -96,7 +96,6 @@ class MCUDevice:
         """
         while True:
             message = await self.tx_queue.get()
-            print(f"Tx: {message}")
 
             pkt = message.encode()
             self.midi_out.send_message(pkt)
@@ -300,7 +299,6 @@ class MCUDevice:
             text (str): Text to send
             display_offset (int, optional): Offset to write to. Defaults to 0.
         """
-        print(f"Updating LCD: {text} offset: {display_offset:02x}")
         self.tx_queue.put_nowait(
             UpdateLCD(text=text, display_offset=display_offset)
         )
