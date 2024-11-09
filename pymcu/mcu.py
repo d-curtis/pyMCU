@@ -319,14 +319,14 @@ class MCUDevice:
             text = str(text)
         if type(text) is str:
             offset = (index * LCD_CHAR_WIDTH) + (line * 0x38)
-            self.update_lcd_raw(f"{text[:LCD_CHAR_WIDTH]:^LCD_CHAR_WIDTH}", display_offset=offset)
+            self.update_lcd_raw(f"{text[:LCD_CHAR_WIDTH]:^{LCD_CHAR_WIDTH}}", display_offset=offset)
             return
 
         for line, line_text in enumerate(text):
             if line > 1:
                 return
             offset = (index * LCD_CHAR_WIDTH) + (line * 0x38)
-            self.update_lcd_raw(f"{line_text[:LCD_CHAR_WIDTH]:^LCD_CHAR_WIDTH}", display_offset=offset)
+            self.update_lcd_raw(f"{line_text[:LCD_CHAR_WIDTH]:^{LCD_CHAR_WIDTH}}", display_offset=offset)
 
 
     def update_lcd_colour(self, index: int, colour: int) -> None:
