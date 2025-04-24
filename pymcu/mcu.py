@@ -381,6 +381,20 @@ class MCUDevice:
         self.tx_queue.put_nowait(FaderMoveEvent(index=index, position=position))
 
 
+    def set_vpot_led(self, index: int, mode: int, value: int, extra: bool = False) -> None:
+        """
+        Set the state of a VPot LED
+
+        Args:
+            index (int): VPot index
+            mode (int): LED ring mode (single, fill-centre, fill-left, width)
+            value (int): Value
+            extra (bool, optional): Extra LED. Defaults to False.
+        """
+        self.tx_queue.put_nowait(
+            SetVPotLED(index=index, mode=mode, value=value, extra=extra)
+        )
+
     # ===== #
 
 
@@ -429,20 +443,22 @@ if __name__ == "__main__":
         controller.tx_queue.put_nowait(UpdateLCDColour(colours=[colour_idx]*8))
 
 
-    controller.on_button_event = demo_button
-    controller.on_raw_fader_event = demo_fader
-    controller.on_managed_fader_event = print
-    controller.on_vpot_event = demo_vpot
-    controller.on_scrollwheel_event = demo_wheel
+#    controller.on_button_event = demo_button
+#    controller.on_raw_fader_event = demo_fader
+#    controller.on_managed_fader_event = print
+#    controller.on_vpot_event = demo_vpot
+#    controller.on_scrollwheel_event = demo_wheel
 
-    controller.update_single_lcd("X2P Gtr\nDnte 01", index=0)
-    controller.update_single_lcd("X2P 2\nDnte 02", index=1)
-    controller.update_single_lcd("MP8R 7\nDnte 31", index=2)
-    controller.update_single_lcd("MP8R 8\nDnte 31", index=3)
-    controller.update_single_lcd("Peak L\nAnlg 15", index=4)
-    controller.update_single_lcd("Peak R\nAnlg 16", index=5)
-    controller.update_single_lcd("Sample\nLoopB 1", index=6)
-    controller.update_single_lcd("Kemp DI\nSPDIF 1", index=7)
+    controller.update_lcd_colours([LCD_PINK*8])
+
+#    controller.update_single_lcd("X2P Gtr\nDnte 01", index=0)
+#    controller.update_single_lcd("X2P 2\nDnte 02", index=1)
+#    controller.update_single_lcd("MP8R 7\nDnte 31", index=2)
+#    controller.update_single_lcd("MP8R 8\nDnte 31", index=3)
+#    controller.update_single_lcd("Peak L\nAnlg 15", index=4)
+#    controller.update_single_lcd("Peak R\nAnlg 16", index=5)
+#    controller.update_single_lcd("Sample\nLoopB 1", index=6)
+#    controller.update_single_lcd("Kemp DI\nSPDIF 1", index=7)
 
 
 
