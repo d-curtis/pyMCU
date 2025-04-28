@@ -46,6 +46,16 @@ class DeviceQuery(MCUBase):
 
     def to_midi(self):
         return SOX + MCU_HEADER + [self.command] + EOX
+    
+    @classmethod
+    def from_midi(cls, syx: list[int]):
+        if syx[0] != 0xF0 or syx[-1] != 0xF7:
+            raise ValueError(f"Invalid SysEx message: {syx}")
+        if syx[1:4] != MCU_HEADER:
+            raise ValueError(f"Invalid SysEx header: {syx}")
+        if syx[4] != 0x00:
+            raise ValueError(f"Not a Device Query message: {syx}")
+        return cls()
 
 
 @dataclass

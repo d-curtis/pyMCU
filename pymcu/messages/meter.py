@@ -56,3 +56,12 @@ class UpdateMeter():
                 break
         
         self.data_byte = self.index << 4 | lsn
+    
+    @classmethod
+    def from_midi(cls, data: list[int]):
+        """
+        Decode a MIDI message into a MeterUpdate object
+        """
+        index = (data[0] & 0x0F)
+        value = (data[1] & 0x0F) << 4 | (data[2] & 0x0F)
+        return cls(index=index, value=value)

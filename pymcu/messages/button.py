@@ -18,6 +18,10 @@ class SetLED():
     def encode(self):
         return [0x90, self.index, self.state]
 
+    @classmethod
+    def from_midi(cls, data):
+        return cls(index=data[1], state=data[2])
+
 
 @dataclass
 class ButtonPressEvent():
