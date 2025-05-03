@@ -278,7 +278,7 @@ class UpdateLCDColour(MCUBase):
 
     def __post_init__(self):
         if len(self.colours) != 8:
-            raise ValueError("Need 8 colours")
+            raise ValueError(f"Need 8 colours ({self.colours})")
 
     def encode(self) -> list[int]:
         return \

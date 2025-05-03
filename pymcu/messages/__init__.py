@@ -6,7 +6,10 @@ from .sysex import *
 from .vpot import *
 
 __all__ = [
-
+    "FaderMoveEvent",
+    "ButtonPressEvent",
+    "SetLED",
+    "NOTE_MAP"
 ]
 
 def mcu_from_midi(data: list[int]):

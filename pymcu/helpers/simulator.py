@@ -1,5 +1,7 @@
 import tkinter as tk
 import random
+from rtmidi.midiutil import open_midiinput, open_midioutput
+import asyncio
 
 from .surface_model import MCUSurfaceModel
 
@@ -22,13 +24,20 @@ YELLOW = "#ECA400"
 UI_WIDTH = 1200
 UI_HEIGHT = 675
 
+ASYNC_UPDATE_INTERVAL = 0.1
+
 class MCUSimulatorGUI:
-    def __init__(self, master, surface: MCUSurfaceModel) -> None:
-        self.master = master
+    def __init__(self, surface: MCUSurfaceModel) -> None:
+        self.master = tk.Tk()
+        self.master.title("MCU Simulator")
+        self.master.attributes("-topmost", True)
+        self.master.geometry(f"{UI_WIDTH}x{UI_HEIGHT}")
+
         self.surface = surface
-        self.canvas = tk.Canvas(master, width=UI_WIDTH, height=UI_HEIGHT, background=C_BG_MEDIUM)
+        self.canvas = tk.Canvas(self.master, width=UI_WIDTH, height=UI_HEIGHT, background=C_BG_MEDIUM)
         self.draw_surface()
         self.canvas.pack()
+        self.update()
     
     def draw_surface(self) -> None:
         for i in range(len(self.surface.faders)):
@@ -154,11 +163,25 @@ class MCUSimulatorGUI:
         BUTTON_H = 30
         BUTTON_W = 60
         button_y_anchor = 300
-        for b_i, b in enumerate(["REC", "SEL", "SOLO", "MUTE"]):
+        for b_i, b in enumerate(["Rec", "Sel", "Solo", "Mute"]):
+            model_index = i + 8 * b_i
             button_x = x + 5
             button_y = button_y_anchor + 5 + (BUTTON_H * b_i + 5 * b_i)
-            self.canvas.create_rectangle(button_x, button_y, button_x + BUTTON_W, button_y + BUTTON_H, fill=C_BUTTON_ON, outline=C_TRIM)
-            self.canvas.create_text(button_x + BUTTON_W / 2, button_y + BUTTON_H / 2, text=b, fill=C_TEXT_DARK, font=("Helvetica", 16))
+            self.canvas.create_rectangle(
+                button_x, 
+                button_y, 
+                button_x + BUTTON_W, 
+                button_y + BUTTON_H, 
+                fill=C_BUTTON_ON if self.surface.leds[model_index].state else C_BG_DARK, 
+                outline=C_TRIM
+            )
+            self.canvas.create_text(
+                button_x + BUTTON_W / 2, 
+                button_y + BUTTON_H / 2, 
+                text=b, 
+                fill=C_TEXT_DARK if self.surface.leds[model_index].state else C_TEXT_LIGHT, 
+                font=("Helvetica", 16)
+            )
         
         # VPot Arc
         vpot_y_anchor = 235
@@ -192,17 +215,17 @@ class MCUSimulatorGUI:
     def update(self) -> None:
         self.canvas.delete("all")
         self.draw_surface()
-        self.master.after(100, self.update)
+        # self.master.after(100, self.update)
 
-
-if __name__ == "__main__":
-    root = tk.Tk()
-    root.title("MCU Simulator")
-    root.attributes("-topmost", True)
-    root.geometry(f"{UI_WIDTH}x{UI_HEIGHT}")
-    
-    surface = MCUSurfaceModel()
-    simulator = MCUSimulatorGUI(root, surface)
-    
-    simulator.update()
-    root.mainloop()
+    async def run(self):
+        """
+        Run the simulator one event at a time, allowing for async
+        """
+        while True:
+            try:
+                self.update()
+                self.master.update()
+                await asyncio.sleep(ASYNC_UPDATE_INTERVAL)
+            except tk.TclError as e:
+                if "application has been destroyed" in e.args[0]:
+                    raise

@@ -2,7 +2,7 @@ import asyncio
 
 from rtmidi.midiutil import open_midiinput, open_midioutput
 from rtmidi import MidiIn, MidiOut
-from typing import Callable, Awaitable, Union
+from typing import Callable, Awaitable, Union, Optional
 
 from .messages.sysex import *
 from .messages.fader import *
@@ -10,6 +10,8 @@ from .messages.meter import *
 from .messages.button import *
 from .messages.vpot import *
 from .helpers.managed_fader import ManagedFader
+from .helpers.simulator import MCUSimulatorGUI
+from .helpers.surface_model import MCUSurfaceModel
 
 
 PING_INTERVAL = 5 # seconds
@@ -27,7 +29,7 @@ async def call_or_await(func: Callback_T, *args, **kwargs) -> None:
         func(*args, **kwargs)
 
 class MCUDevice:
-    def __init__(self, input_port: Union[str, MidiIn], output_port: Union[str, MidiOut]):
+    def __init__(self, input_port: Union[str, MidiIn], output_port: Union[str, MidiOut], run_simulator: bool = False):
         self.tx_queue = asyncio.Queue(maxsize=1024)
         self.response_queue = asyncio.Queue(maxsize=1024)
         self.midi_in, _ = open_midiinput(input_port) if type(input_port) is str else (input_port, None)
@@ -49,6 +51,13 @@ class MCUDevice:
         self.on_managed_fader_event: Callback_T = None
         self.on_button_event: Callback_T = None
         self.on_scrollwheel_event: Callback_T = None
+
+        if run_simulator:
+            self.simulator_model = MCUSurfaceModel()
+            self.simulator = MCUSimulatorGUI(surface=self.simulator_model)
+        else:
+            self.simulator_model = None
+            self.simulator = None
 
 
     async def _connect_request_producer(self) -> None:
@@ -136,6 +145,8 @@ class MCUDevice:
             await asyncio.sleep(RX_INTERVAL)
             message = self.midi_in.get_message()
             if message:
+                if self.simulator_model:
+                    self.simulator_model.update(message[0])
                 match message := message[0]:
                     case 0xF0:
                         self._receive_sysex(message)
@@ -404,6 +415,8 @@ class MCUDevice:
         asyncio.create_task(self._response_consumer())
         asyncio.create_task(self._fader_update_producer())
         asyncio.create_task(self._connect_request_producer())
+        if self.simulator:
+            asyncio.create_task(self.simulator.run())
 
         while True:
             await asyncio.sleep(1)
@@ -417,11 +430,13 @@ class MCUDevice:
 if __name__ == "__main__":
     inport, _ = open_midiinput("X-Touch INT")
     outport, _ = open_midioutput("X-Touch INT")
-    controller = MCUDevice(inport, outport)
+    controller = MCUDevice(inport, outport, run_simulator=True)
 
     # ...As an example
 
     def demo_button(event: ButtonPressEvent) -> None:
+        if controller.simulator_model:
+            controller.simulator_model.update(event)
         if event.index in range(32, 40):
             controller.faders[event.index - 32].set_position(0x3FFF if event.state else 0)
     
@@ -443,13 +458,13 @@ if __name__ == "__main__":
         controller.tx_queue.put_nowait(UpdateLCDColour(colours=[colour_idx]*8))
 
 
-#    controller.on_button_event = demo_button
+    controller.on_button_event = demo_button
 #    controller.on_raw_fader_event = demo_fader
 #    controller.on_managed_fader_event = print
 #    controller.on_vpot_event = demo_vpot
 #    controller.on_scrollwheel_event = demo_wheel
 
-    controller.update_lcd_colours([LCD_PINK*8])
+    controller.update_lcd_colours([LCD_PINK]*8)
 
 #    controller.update_single_lcd("X2P Gtr\nDnte 01", index=0)
 #    controller.update_single_lcd("X2P 2\nDnte 02", index=1)
