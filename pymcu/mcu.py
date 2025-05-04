@@ -145,6 +145,7 @@ class MCUDevice:
             await asyncio.sleep(RX_INTERVAL)
             message = self.midi_in.get_message()
             if message:
+                print(message)
                 if self.simulator_model:
                     self.simulator_model.update(message[0])
                 match message := message[0]:
