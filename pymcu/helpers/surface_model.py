@@ -21,10 +21,12 @@ class MCUSurfaceModel():
         """
         Update the surface model with a MIDI message
         """
+        print(message)
         try:
             event = SetLED.from_midi(message)
             print(event)
-        except:
+        except Exception as e:
+            print(e)
             return
         try:
             self.leds[event.index] = LEDData(event.state)
