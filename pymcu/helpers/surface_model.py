@@ -27,7 +27,7 @@ class MCUSurfaceModel():
         except:
             return
         try:
-            self.buttons[event.index] = LEDData(event.state)
+            self.leds[event.index] = LEDData(event.state)
         except IndexError:
             pass
 
